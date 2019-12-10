@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -50,18 +50,6 @@ enum {
 };
 
 bool codec_reg_done;
-
-struct tdm_dai_data {
-	DECLARE_BITMAP(status_mask, 3);
-	u32 rate;
-	u32 channels;
-	u32 bitwidth;
-	u32 num_group_ports;
-	struct afe_clk_set clk_set; /* hold LPASS clock config. */
-	union afe_port_group_config group_cfg; /* hold tdm group config */
-	struct afe_tdm_port_config port_cfg; /* hold tdm config */
-};
-
 
 /* TDM default config */
 static struct dev_config tdm_rx_cfg[TDM_INTERFACE_MAX][TDM_PORT_MAX] = {
@@ -232,7 +220,14 @@ static bool msm_swap_gnd_mic(struct snd_soc_codec *codec, bool active);
 static struct wcd_mbhc_config mbhc_cfg = {
 	.read_fw_bin = false,
 	.calibration = NULL,
+	#ifndef VENDOR_EDIT
+	/* Jianfeng.Qiu@PSW.MM.AudioDriver.HeadsetDet, 2017/04/10,
+	 * Modify for headset detect.
+	 */
 	.detect_extn_cable = true,
+	#else /* VENDOR_EDIT */
+	.detect_extn_cable = false,
+	#endif /* VENDOR_EDIT */
 	.mono_stero_detection = false,
 	.swap_gnd_mic = NULL,
 	.hs_ext_micbias = true,
@@ -2174,6 +2169,7 @@ const struct snd_kcontrol_new msm_common_snd_controls[] = {
 			tdm_tx_ch_put),
 	SOC_ENUM_EXT("MultiMedia5_RX QOS Vote", qos_vote, msm_qos_ctl_get,
 			msm_qos_ctl_put),
+
 };
 
 /**
@@ -2815,91 +2811,6 @@ void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 }
 EXPORT_SYMBOL(msm_mi2s_snd_shutdown);
 
-static int msm_get_tdm_mode(u32 port_id)
-{
-	int tdm_mode;
-
-	switch (port_id) {
-	case AFE_PORT_ID_PRIMARY_TDM_RX:
-	case AFE_PORT_ID_PRIMARY_TDM_TX:
-		tdm_mode = TDM_PRI;
-	break;
-	case AFE_PORT_ID_SECONDARY_TDM_RX:
-	case AFE_PORT_ID_SECONDARY_TDM_TX:
-		tdm_mode = TDM_SEC;
-	break;
-	case AFE_PORT_ID_TERTIARY_TDM_RX:
-	case AFE_PORT_ID_TERTIARY_TDM_TX:
-		tdm_mode = TDM_TERT;
-	break;
-	case AFE_PORT_ID_QUATERNARY_TDM_RX:
-	case AFE_PORT_ID_QUATERNARY_TDM_TX:
-		tdm_mode = TDM_QUAT;
-	break;
-	case AFE_PORT_ID_QUINARY_TDM_RX:
-	case AFE_PORT_ID_QUINARY_TDM_TX:
-		tdm_mode = TDM_QUIN;
-	break;
-	default:
-		pr_err("%s: Invalid port id: %d\n", __func__, port_id);
-		tdm_mode = -EINVAL;
-	}
-	return tdm_mode;
-}
-
-int msm_tdm_snd_startup(struct snd_pcm_substream *substream)
-{
-	int ret = 0;
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
-	struct snd_soc_card *card = rtd->card;
-	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
-	struct tdm_dai_data *dai_data = dev_get_drvdata(cpu_dai->dev);
-	int tdm_mode = msm_get_tdm_mode(cpu_dai->id);
-
-	if (tdm_mode < 0) {
-		dev_err(rtd->card->dev, "%s: Invalid tdm_mode\n", __func__);
-		return tdm_mode;
-	}
-	dai_data->clk_set.enable = true;
-	ret = afe_set_lpass_clock_v2(cpu_dai->id, &dai_data->clk_set);
-	if (ret < 0)
-		pr_err("%s: afe lpass clock failed, err:%d\n",
-			__func__, ret);
-	/* currently only supporting TDM_RX_0 and TDM_TX_0 */
-	if (pdata->mi2s_gpio_p[tdm_mode])
-		ret = msm_cdc_pinctrl_select_active_state(
-			pdata->mi2s_gpio_p[tdm_mode]);
-	return ret;
-}
-EXPORT_SYMBOL(msm_tdm_snd_startup);
-
-void msm_tdm_snd_shutdown(struct snd_pcm_substream *substream)
-{
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
-	struct snd_soc_card *card = rtd->card;
-	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
-	struct tdm_dai_data *dai_data = dev_get_drvdata(cpu_dai->dev);
-	int tdm_mode = msm_get_tdm_mode(cpu_dai->id);
-	int ret;
-
-	if (tdm_mode < 0) {
-		dev_err(rtd->card->dev, "%s: Invalid tdm_mode\n", __func__);
-		return;
-	}
-	dai_data->clk_set.enable = false;
-	ret = afe_set_lpass_clock_v2(cpu_dai->id, &dai_data->clk_set);
-	if (ret < 0)
-		pr_err("%s: afe lpass clock failed, err:%d\n", __func__, ret);
-
-	/* currently only supporting TDM_RX_0 and TDM_TX_0 */
-	if (pdata->mi2s_gpio_p[tdm_mode])
-		msm_cdc_pinctrl_select_sleep_state(
-			pdata->mi2s_gpio_p[tdm_mode]);
-}
-EXPORT_SYMBOL(msm_tdm_snd_shutdown);
-
 /* Validate whether US EU switch is present or not */
 static int msm_prepare_us_euro(struct snd_soc_card *card)
 {
@@ -2917,7 +2828,6 @@ static int msm_prepare_us_euro(struct snd_soc_card *card)
 				__func__, pdata->us_euro_gpio, ret);
 		}
 	}
-
 	return ret;
 }
 
@@ -3475,6 +3385,11 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	const struct of_device_id *match;
 	const char *usb_c_dt = "qcom,msm-mbhc-usbc-audio-supported";
 
+	#ifdef VENDOR_EDIT
+	/* Jianfeng.Qiu@PSW.MM.AudioDriver.Machine,2017/09/21, Add for log*/
+	pr_info("%s: *** Enter\n", __func__);
+	#endif /* VENDOR_EDIT */
+
 	pdata = devm_kzalloc(&pdev->dev,
 			     sizeof(struct msm_asoc_mach_data),
 			     GFP_KERNEL);
@@ -3612,6 +3527,20 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	}
 	if (pdata->snd_card_val > INT_MAX_SND_CARD)
 		msm_ext_register_audio_notifier(pdev);
+
+	#ifdef VENDOR_EDIT
+	/* Jianfeng.Qiu@PSW.MM.AudioDriver.Machine,2017/09/21, Add for log*/
+	pr_info("%s: sond card register success.\n", __func__);
+	#endif /* VENDOR_EDIT */
+
+	#ifdef VENDOR_EDIT
+	/*xiang.fei@PSW.MM.AudioDriver.Codec, 2019/01/10, Add for set defaut state with dmic data pin */
+	if ((pdata->snd_card_val == INT_SND_CARD)) {
+		if (msm_cdc_pinctrl_select_sleep_state(pdata->dmic_gpio_p)) {
+			pr_err("%s: set dmic data pin high-z state error\n", __func__);
+		}
+	}
+	#endif /* VENDOR_EDIT */
 
 	return 0;
 err:

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -985,9 +985,6 @@ static struct cal_block_data *msm_routing_find_topology_by_path(int path,
 		cal_block = list_entry(ptr,
 			struct cal_block_data, list);
 
-		if (cal_utils_is_cal_stale(cal_block))
-			continue;
-
 		if (((struct audio_cal_info_adm_top *)cal_block
 			->cal_info)->path == path) {
 			return cal_block;
@@ -1014,9 +1011,6 @@ static struct cal_block_data *msm_routing_find_topology(int path,
 
 		cal_block = list_entry(ptr,
 			struct cal_block_data, list);
-
-		if (cal_utils_is_cal_stale(cal_block))
-			continue;
 
 		cal_info = (struct audio_cal_info_adm_top *)
 			cal_block->cal_info;
@@ -1051,11 +1045,6 @@ static int msm_routing_find_topology_on_index(int session_type, int app_type,
 	return topology;
 }
 
-/*
- * Retrieving cal_block will mark cal_block as stale.
- * Hence it cannot be reused or resent unless the flag
- * is reset.
- */
 static int msm_routing_get_adm_topology(int fedai_id, int session_type,
 					int be_id)
 {
@@ -1545,7 +1534,7 @@ int msm_pcm_routing_reg_phy_stream(int fedai_id, int perf_mode,
 			if ((copp_idx < 0) ||
 				(copp_idx >= MAX_COPPS_PER_PORT)) {
 				pr_err("%s: adm open failed copp_idx:%d\n",
-				       __func__, copp_idx);
+					__func__, copp_idx);
 				mutex_unlock(&routing_lock);
 				return -EINVAL;
 			}
@@ -3801,6 +3790,10 @@ static int msm_routing_ec_ref_rx_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+#ifndef VENDOR_EDIT
+/* Jianfeng.Qiu@PSW.MM.AudioDriver.Machine.1234193, 2017/04/02,
+ * Modify for audio ec (I2S_RX -> PRI_MI2S_RX, SEC_I2S_RX -> SEC_MI2S_RX)
+ */
 static const char *const ec_ref_rx[] = { "None", "SLIM_RX", "I2S_RX",
 	"PRI_MI2S_TX", "SEC_MI2S_TX",
 	"TERT_MI2S_TX", "QUAT_MI2S_TX", "SEC_I2S_RX", "PROXY_RX",
@@ -3809,6 +3802,16 @@ static const char *const ec_ref_rx[] = { "None", "SLIM_RX", "I2S_RX",
 	"TERT_MI2S_RX", "QUAT_MI2S_RX", "TERT_TDM_TX_0", "USB_AUDIO_RX",
 	"INT0_MI2S_RX", "INT4_MI2S_RX", "INT3_MI2S_TX", "DISPLAY_PORT",
 	"PRI_TDM_RX_1"};
+#else /* VENDOR_EDIT */
+static const char *const ec_ref_rx[] = { "None", "SLIM_RX", "PRI_MI2S_RX",
+	"PRI_MI2S_TX", "SEC_MI2S_TX",
+	"TERT_MI2S_TX", "QUAT_MI2S_TX", "SEC_MI2S_RX", "PROXY_RX",
+	"SLIM_5_RX", "SLIM_1_TX", "QUAT_TDM_TX_1",
+	"QUAT_TDM_RX_0", "QUAT_TDM_RX_1", "QUAT_TDM_RX_2", "SLIM_6_RX",
+	"TERT_MI2S_RX", "QUAT_MI2S_RX", "TERT_TDM_TX_0", "USB_AUDIO_RX",
+	"INT0_MI2S_RX", "INT4_MI2S_RX", "INT3_MI2S_TX", "DISPLAY_PORT",
+	"PRI_TDM_RX_1"};
+#endif /* VENDOR_EDIT */
 
 static const struct soc_enum msm_route_ec_ref_rx_enum[] = {
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(ec_ref_rx), ec_ref_rx),
@@ -11415,6 +11418,12 @@ static const struct snd_kcontrol_new tert_mi2s_rx_port_mixer_controls[] = {
 	SOC_SINGLE_EXT("SLIM_8_TX", MSM_BACKEND_DAI_TERTIARY_MI2S_RX,
 	MSM_BACKEND_DAI_SLIMBUS_8_TX, 1, 0, msm_routing_get_port_mixer,
 	msm_routing_put_port_mixer),
+	#ifdef VENDOR_EDIT
+	/*Jianfeng.Qiu@PSW.MM.AudioDriver.Machine, 2018/05/18, Add for loopback test*/
+	SOC_SINGLE_EXT("INT3_MI2S_TX_TERT", MSM_BACKEND_DAI_TERTIARY_MI2S_RX,
+	MSM_BACKEND_DAI_INT3_MI2S_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
+	#endif /* VENDOR_EDIT */
 };
 
 static const struct snd_kcontrol_new sec_mi2s_rx_port_mixer_controls[] = {
@@ -11445,6 +11454,12 @@ static const struct snd_kcontrol_new sec_mi2s_rx_port_mixer_controls[] = {
 	SOC_SINGLE_EXT("AUX_PCM_UL_TX", MSM_BACKEND_DAI_SECONDARY_MI2S_RX,
 	MSM_BACKEND_DAI_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
 	msm_routing_put_port_mixer),
+	#ifdef VENDOR_EDIT
+	/*Jianfeng.Qiu@PSW.MM.AudioDriver.Machine, 2017/02/20, Add for loopback test*/
+	SOC_SINGLE_EXT("INT3_MI2S_TX_SEC", MSM_BACKEND_DAI_SECONDARY_MI2S_RX,
+	MSM_BACKEND_DAI_INT3_MI2S_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
+	#endif /* VENDOR_EDIT */
 };
 
 static const struct snd_kcontrol_new lsm1_mixer_controls[] = {
@@ -12994,6 +13009,12 @@ static const struct snd_soc_dapm_widget msm_qdsp6_widgets[] = {
 	SND_SOC_DAPM_AIF_IN("QUIN_MI2S_DL_HL",
 		"Quinary MI2S_RX Hostless Playback",
 		0, 0, 0, 0),
+	#ifdef VENDOR_EDIT
+	/*Jianfeng.Qiu@PSW.MM.AudioDriver.Machine, 2017/02/20, Add for loopback test*/
+	SND_SOC_DAPM_AIF_IN("INT3_MI2S_DL_HL_MMI",
+		"INT3 MI2S_TX Hostless Playback",
+		0, 0, 0, 0),
+	#endif /* VENDOR_EDIT */
 
 	SND_SOC_DAPM_AIF_IN("AUXPCM_DL_HL", "AUXPCM_HOSTLESS Playback",
 		0, 0, 0, 0),
@@ -16838,6 +16859,12 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"QUIN_MI2S_RX Port Mixer", "SLIM_8_TX", "SLIMBUS_8_TX"},
 	{"QUIN_MI2S_RX", NULL, "QUIN_MI2S_RX Port Mixer"},
 
+	#ifdef VENDOR_EDIT
+	/*Jianfeng.Qiu@PSW.MM.AudioDriver.Machine, 2017/02/20, Add for loopback test*/
+	{"TERT_MI2S_RX Port Mixer", "INT3_MI2S_TX_TERT", "INT3_MI2S_TX"},
+	{"SEC_MI2S_RX Port Mixer", "INT3_MI2S_TX_SEC", "INT3_MI2S_TX"},
+	#endif /* VENDOR_EDIT */
+
 	/* Backend Enablement */
 
 	{"BE_OUT", NULL, "PRI_I2S_RX"},
@@ -17456,33 +17483,6 @@ static const struct snd_kcontrol_new aptx_dec_license_controls[] = {
 	msm_aptx_dec_license_control_put),
 };
 
-static int msm_routing_put_port_chmap_mixer(struct snd_kcontrol *kcontrol,
-					    struct snd_ctl_elem_value *ucontrol)
-{
-	uint8_t channel_map[PCM_FORMAT_MAX_NUM_CHANNEL];
-	uint32_t be_idx = ucontrol->value.integer.value[0];
-	int i;
-
-	for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL; i++) {
-		channel_map[i] = (char)(ucontrol->value.integer.value[i + 1]);
-		if (channel_map[i] > PCM_MAX_CHMAP_ID) {
-			pr_err("%s: Invalid channel map %d\n",
-				__func__, channel_map[i]);
-			return -EINVAL;
-		}
-	}
-	adm_set_port_multi_ch_map(channel_map, msm_bedais[be_idx].port_id);
-
-	return 0;
-}
-
-static const struct snd_kcontrol_new port_multi_channel_map_mixer_controls[] = {
-	SOC_SINGLE_MULTI_EXT("Backend Device Channel Map", SND_SOC_NOPM, 0,
-			MSM_BACKEND_DAI_MAX, 0,
-			PCM_FORMAT_MAX_NUM_CHANNEL + 1, NULL,
-			msm_routing_put_port_chmap_mixer),
-};
-
 static int msm_routing_be_dai_name_table_info(struct snd_kcontrol *kcontrol,
 					      struct snd_ctl_elem_info *uinfo)
 {
@@ -17674,10 +17674,6 @@ static int msm_routing_probe(struct snd_soc_platform *platform)
 					ARRAY_SIZE(aptx_dec_license_controls));
 	snd_soc_add_platform_controls(platform, stereo_channel_reverse_control,
 				ARRAY_SIZE(stereo_channel_reverse_control));
-	snd_soc_add_platform_controls(platform,
-			port_multi_channel_map_mixer_controls,
-			ARRAY_SIZE(port_multi_channel_map_mixer_controls));
-
 	return 0;
 }
 
